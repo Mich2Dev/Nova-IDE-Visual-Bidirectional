@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0D0D11;
+  --color-surface: #15151B;
+  --color-panel: #1E1E26;
+  --color-border: #2C2C35;
+  --color-primary: #6366F1;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-gray-200 antialiased overflow-hidden m-0 p-0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+}
+
+/* Custom Scrollbar for a premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Phase 8: GrapesJS Dark Theme Overrides for Side Panels */
+.gjs-cv-canvas {
+  background-color: transparent !important;
+}
+
+/* Typography and Backgrounds */
+.gjs-one-bg { background-color: var(--color-panel) !important; }
+.gjs-two-color { color: #e2e8f0 !important; }
+.gjs-three-bg { background-color: var(--color-primary) !important; color: white !important; }
+.gjs-four-color, .gjs-four-color-h:hover { color: var(--color-primary) !important; }
+
+/* Blocks */
+.gjs-block {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px;
+  background-color: var(--color-surface) !important;
+  transition: all 0.2s ease !important;
+  padding: 10px !important;
+  min-height: 80px !important;
+}
+.gjs-block:hover {
+  border-color: var(--color-primary) !important;
+  transform: translateY(-2px);
+}
+
+/* Layers / DOM Tree */
+.gjs-layer-title {
+  background-color: transparent !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+.gjs-layer-name {
+  color: #cbd5e1 !important;
+}
+.gjs-layer-count {
+  color: var(--color-primary) !important;
+}
+
+/* Sectors / Style Manager */
+.gjs-sm-sector .gjs-sm-title {
+  background-color: var(--color-surface) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  color: #cbd5e1 !important;
+  padding: 12px 10px !important;
+  font-weight: 600 !important;
+}
+.gjs-sm-property {
+  background-color: var(--color-panel) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+.gjs-field {
+  background-color: #0f172a !important;
+  border: 1px solid var(--color-border) !important;
+  color: white !important;
+  border-radius: 4px !important;
+}
+.gjs-radio-item-label {
+  background-color: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
+}
+.gjs-radio-item-label:hover, .gjs-radio-item input:checked + .gjs-radio-item-label {
+  background-color: var(--color-primary) !important;
+  color: white !important;
+  border-color: var(--color-primary) !important;
+}

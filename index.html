@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nova-ide</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="error-log" style="color: red; position: fixed; top: 0; left: 0; z-index: 9999; background: black; white-space: pre-wrap; padding: 10px; display: none;"></div>
+    <script>
+      window.addEventListener('error', function(e) {
+        document.getElementById('error-log').style.display = 'block';
+        document.getElementById('error-log').innerText += '\n' + e.message + '\n' + e.filename + ':' + e.lineno;
+        if (e.error && e.error.stack) {
+          document.getElementById('error-log').innerText += '\n' + e.error.stack;
+        }
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        document.getElementById('error-log').style.display = 'block';
+        document.getElementById('error-log').innerText += '\nUnhandled promise rejection: ' + e.reason;
+      });
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
