@@ -91,6 +91,15 @@ const CodeBlock: React.FC<{
     if (result?.success) {
       if (activeTabId === targetPath || tabs.some(t => t.path === targetPath)) {
          setTabContent(targetPath, code);
+         
+         // Parsear a Visual State si es HTML o React
+         if (lang === 'html' || lang === 'tsx' || lang === 'jsx' || targetPath.endsWith('.html') || targetPath.endsWith('.tsx')) {
+           const { htmlToCraft } = await import('../../utils/htmlToCraft');
+           const parsedVisualState = htmlToCraft(code);
+           if (parsedVisualState) {
+             useStore.getState().updateTabVisualState(targetPath, parsedVisualState);
+           }
+         }
       }
       if (finalFilename && projectPath) window.dispatchEvent(new Event('nova-refresh-file-tree'));
       markCodeApplied(msgId);
@@ -248,8 +257,10 @@ ${activeTab.content.substring(0, 8000)}${activeTab.content.length > 8000 ? '\n..
 export const ChatPanel: React.FC = () => {
   const {
     messages, addMessage, isTyping, setIsTyping,
-    tabs, activeTabId, fileTree, projectPath, ollamaModel, visualState
+    tabs, activeTabId, fileTree, projectPath, ollamaModel
   } = useStore();
+  const activeTab = tabs.find(t => t.path === activeTabId);
+  const visualState = activeTab?.visualState || null;
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

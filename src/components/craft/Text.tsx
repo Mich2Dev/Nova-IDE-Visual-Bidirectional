@@ -13,6 +13,7 @@ interface TextProps {
   fontFamily?: string;
   italic?: boolean;
   underline?: boolean;
+  className?: string;
 }
 
 export const Text = ({
@@ -27,6 +28,7 @@ export const Text = ({
   fontFamily = 'inherit',
   italic = false,
   underline = false,
+  className = '',
 }: TextProps) => {
   const { connectors: { connect, drag }, isSelected, actions: { setProp } } = useNode((node) => ({
     isSelected: node.events.selected,
@@ -42,6 +44,7 @@ export const Text = ({
 
   return (
     <Tag
+      className={className}
       ref={(ref: HTMLElement | null) => { if (ref) connect(drag(ref)); }}
       onClick={() => { if (isSelected) setEditable(true); }}
       onBlur={(e: React.FocusEvent<HTMLElement>) => {

@@ -26,6 +26,7 @@ export type TabNode = {
   content: string;
   language: 'html' | 'css' | 'js' | 'ts' | 'json' | 'text';
   isDirty: boolean;
+  visualState?: string; // Estado de Craft.js guardado por archivo
 };
 
 interface NovaStore {
@@ -43,6 +44,7 @@ interface NovaStore {
   setActiveTab: (path: string) => void;
   setTabContent: (path: string, content: string) => void;
   markTabClean: (path: string) => void;
+  updateTabVisualState: (path: string, state: string) => void;
 
   // Preview
   previewServerUrl: string | null;
@@ -59,9 +61,8 @@ interface NovaStore {
   setIsTyping: (v: boolean) => void;
   markCodeApplied: (msgId: string) => void;
 
-  // Visual Editor State
-  visualState: string | null;
-  setVisualState: (state: string) => void;
+  // Visual Editor State (Retained as fallback or getter if needed, but best removed)
+  // Terminal
 
   // Terminal
   terminalOutput: string[];
@@ -153,8 +154,9 @@ export const useStore = create<NovaStore>((set, get) => ({
   })),
 
   // Visual Editor State
-  visualState: null,
-  setVisualState: (state) => set({ visualState: state }),
+  updateTabVisualState: (path, visualState) => set(state => ({
+    tabs: state.tabs.map(t => t.path === path ? { ...t, visualState } : t)
+  })),
 
   // Terminal
   terminalOutput: [],

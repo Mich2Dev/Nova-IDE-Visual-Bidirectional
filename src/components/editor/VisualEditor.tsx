@@ -13,24 +13,24 @@ import { useEditor as useCraftEditor } from '@craftjs/core';
 import { compileCraftToReact } from '../../utils/craftCompiler';
 import { Code2 } from 'lucide-react';
 
-const StateObserver = () => {
+const StateObserver = ({ activeTabId }: { activeTabId: string }) => {
   const { nodes, query } = useCraftEditor((state) => ({ nodes: state.nodes }));
-  const setVisualState = useStore(state => state.setVisualState);
+  const updateTabVisualState = useStore(state => state.updateTabVisualState);
 
   React.useEffect(() => {
     const timeout = setTimeout(() => {
       const json = query.serialize();
-      setVisualState(json);
+      updateTabVisualState(activeTabId, json);
     }, 500);
     return () => clearTimeout(timeout);
-  }, [nodes]);
+  }, [nodes, activeTabId, updateTabVisualState, query]);
 
   return null;
 };
 
 export const VisualEditor: React.FC = () => {
   const [topPanelId, setTopPanelId] = useState<string>('toolbox');
-  const { visualState, activeTabId, setTabContent, tabs } = useStore();
+  const { activeTabId, setTabContent, tabs } = useStore();
   const activeTab = tabs.find(t => t.path === activeTabId);
 
   const bringToFront = (id: string) => {
@@ -38,17 +38,17 @@ export const VisualEditor: React.FC = () => {
   };
 
   const handleExportCode = () => {
-    if (!visualState || !activeTabId) {
-      alert('Abre un archivo y realiza un diseño primero.');
+    if (!activeTab?.visualState || !activeTabId) {
+      alert('Arrastra al menos un elemento primero.');
       return;
     }
-    const generatedCode = compileCraftToReact(visualState);
+    const generatedCode = compileCraftToReact(activeTab.visualState);
     setTabContent(activeTabId, generatedCode);
     alert(`¡Código generado con éxito en ${activeTab?.name}!\nCambia a la vista "Código" para verlo.`);
   };
 
   return (
-    <div className="flex-1 w-full h-full relative overflow-hidden bg-[#0A0A10]">
+    <div key={activeTabId || 'empty'} className="flex-1 w-full h-full relative overflow-hidden bg-[#0A0A10]">
       {/* Botón flotante para generar código */}
       <button
         onClick={handleExportCode}
@@ -59,7 +59,7 @@ export const VisualEditor: React.FC = () => {
       </button>
 
       <Editor resolver={{ Container, Text, Button, Image, Divider }}>
-        <StateObserver />
+        {activeTabId && <StateObserver activeTabId={activeTabId} />}
         
         {/* Toolbox Panel */}
         <FloatingPanel 
@@ -92,16 +92,17 @@ export const VisualEditor: React.FC = () => {
         {/* Main Canvas */}
         <div className="flex-1 h-full overflow-auto custom-scrollbar p-8 flex justify-center">
           <div className="bg-white min-h-[800px] w-full max-w-[1200px] shadow-2xl rounded-lg overflow-hidden">
-            <Frame>
-              <Element is={Container} padding={20} canvas>
-                <Text text="Hola, soy el Editor Visual Bidireccional!" fontSize={24} />
-                <Divider />
-                <Button text="Arrastra elementos desde el Toolbox" />
-              </Element>
+            <Frame data={activeTab?.visualState}>
+              {!activeTab?.visualState && (
+                <Element is={Container} padding={20} canvas>
+                  <Text text={`Diseñando: ${activeTab?.name || 'Archivo'}`} fontSize={24} />
+                  <Divider />
+                  <Button text="Arrastra elementos desde el Toolbox" />
+                </Element>
+              )}
             </Frame>
           </div>
         </div>
-
       </Editor>
     </div>
   );

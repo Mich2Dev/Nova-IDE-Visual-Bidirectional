@@ -16,6 +16,7 @@ interface ButtonProps {
   full?: boolean;
   variant?: string;
   href?: string;
+  className?: string;
 }
 
 export const Button = ({
@@ -32,6 +33,7 @@ export const Button = ({
   borderColor = 'transparent',
   full = false,
   variant = 'solid',
+  className = '',
 }: ButtonProps) => {
   const { connectors: { connect, drag }, isSelected } = useNode((node) => ({
     isSelected: node.events.selected,
@@ -63,6 +65,7 @@ export const Button = ({
     <button
       ref={(ref) => { if (ref) connect(drag(ref)); }}
       style={styles}
+      className={`hover:opacity-90 active:scale-95 ${className}`}
     >
       {text}
     </button>
