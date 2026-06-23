@@ -1,17 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
+import { parseBuildErrorsFromLines } from '../../lib/parseBuildErrors';
+import { useContextStore } from '../../context/useContextStore';
+import { useLayoutStore } from '../../store/useLayoutStore';
+import { ResizeHandle } from '../layout/ResizeHandle';
 import { Terminal as TerminalIcon, X, Trash2, ChevronUp } from 'lucide-react';
 
 const nova = (window as any).novaAPI;
 
 export const TerminalPanel: React.FC = () => {
   const { terminalOutput, terminalVisible, addTerminalLine, clearTerminal, toggleTerminal, projectPath } = useStore();
+  const terminalHeight = useLayoutStore((s) => s.terminalHeight);
+  const nudgeTerminal = useLayoutStore((s) => s.nudgeTerminal);
+  const setBuildErrors = useContextStore((s) => s.setBuildErrors);
   const [cmd, setCmd] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Subscribe to streaming terminal output
+    setBuildErrors(parseBuildErrorsFromLines(terminalOutput));
+  }, [terminalOutput, setBuildErrors]);
+
+  useEffect(() => {
     const unsub = nova?.onTerminalOutput?.((data: any) => {
       if (data.type === 'stdout' || data.type === 'stderr') {
         addTerminalLine(data.data);
@@ -60,7 +70,9 @@ export const TerminalPanel: React.FC = () => {
   }
 
   return (
-    <div className="h-48 bg-[#0A0A10] border-t border-white/5 flex flex-col shrink-0">
+    <>
+      <ResizeHandle direction="vertical" onResize={nudgeTerminal} />
+      <div className="bg-[#0A0A10] border-t border-white/5 flex flex-col shrink-0" style={{ height: terminalHeight }}>
       {/* Terminal header */}
       <div className="h-7 bg-[#0D0D13] border-b border-white/5 flex items-center px-3 gap-2 shrink-0">
         <TerminalIcon className="w-3 h-3 text-emerald-500" />
@@ -105,5 +117,6 @@ export const TerminalPanel: React.FC = () => {
         />
       </div>
     </div>
+    </>
   );
 };

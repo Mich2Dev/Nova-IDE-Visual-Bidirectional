@@ -1,33 +1,43 @@
 import React, { useEffect } from 'react';
 import { Box, Save, Terminal, Settings, Brain, Sparkle } from 'lucide-react';
 import { useStore } from './store/useStore';
+import { useDraftStore } from './draft/useDraftStore';
 import { FileExplorer } from './components/layout/FileExplorer';
+import { MenuBar } from './components/layout/MenuBar';
 import { CentralArea } from './components/editor/CentralArea';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { BrainPanel } from './components/BrainPanel';
 import { MemoryManager } from './brain/MemoryManager';
-
-const nova = (window as any).novaAPI;
+import { saveActiveFile } from './lib/saveActiveFile';
+import { useLayoutStore } from './store/useLayoutStore';
+import { ResizeHandle } from './components/layout/ResizeHandle';
 
 function App() {
   const {
-    tabs, activeTabId, markTabClean,
+    tabs, activeTabId,
     projectPath,
     toggleTerminal, terminalVisible,
     ollamaModel, setOllamaModel,
   } = useStore();
 
   const activeTab = tabs.find(t => t.path === activeTabId);
+  const isDraftDirty = activeTabId ? useDraftStore.getState().isFileDirty(activeTabId) : false;
+  const canSave = activeTab && (activeTab.isDirty || isDraftDirty);
 
   const [rightTab, setRightTab] = React.useState<'chat' | 'brain'>('chat');
   const [memoryManager, setMemoryManager] = React.useState<MemoryManager | null>(null);
+  const explorerWidth = useLayoutStore((s) => s.explorerWidth);
+  const chatWidth = useLayoutStore((s) => s.chatWidth);
+  const nudgeExplorer = useLayoutStore((s) => s.nudgeExplorer);
+  const nudgeChat = useLayoutStore((s) => s.nudgeChat);
 
   // Initialize MemoryManager when project opens
   useEffect(() => {
     if (projectPath) {
-      // Use a lightweight wrapper that works with path-based approach
-      setMemoryManager(null); // Reset; MemoryManager needs refactor for IPC paths
+      setMemoryManager(new MemoryManager(projectPath));
+    } else {
+      setMemoryManager(null);
     }
   }, [projectPath]);
 
@@ -37,8 +47,7 @@ function App() {
       if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (!activeTab) return;
-        const result = await nova?.writeFile(activeTab.path, activeTab.content);
-        if (result?.success) markTabClean(activeTab.path);
+        await saveActiveFile();
       }
       if (e.ctrlKey && e.key === '`') {
         e.preventDefault();
@@ -56,9 +65,7 @@ function App() {
   }, [activeTab]);
 
   const handleSave = async () => {
-    if (!activeTab) return;
-    await nova?.writeFile(activeTab.path, activeTab.content);
-    markTabClean(activeTab.path);
+    await saveActiveFile();
   };
 
   const handleScaffold = async () => {
@@ -72,9 +79,9 @@ function App() {
     if (!terminalVisible) toggleTerminal();
     
     if (type === '1') {
-      window.novaAPI.spawnCommand('npx', ['-y', 'create-vite@latest', '.', '--template', 'react-ts'], projectPath);
+      (window as any).novaAPI.spawnCommand('npx', ['-y', 'create-vite@latest', '.', '--template', 'react-ts'], projectPath);
     } else if (type === '2') {
-      window.novaAPI.spawnCommand('npx', ['-y', 'create-vite@latest', '.', '--template', 'vanilla'], projectPath);
+      (window as any).novaAPI.spawnCommand('npx', ['-y', 'create-vite@latest', '.', '--template', 'vanilla'], projectPath);
     }
   };
 
@@ -92,23 +99,19 @@ function App() {
           <span className="text-[11px] font-bold text-gray-400 tracking-widest uppercase">Nova</span>
         </div>
 
-        {/* Menu items (decorative + future) */}
-        <div
-          className="flex items-center h-full text-[11px] text-gray-500"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
-          {['File', 'Edit', 'View', 'Run', 'Git'].map(menu => (
-            <div key={menu} className="px-3 h-full flex items-center hover:bg-white/5 cursor-pointer transition-colors hover:text-gray-300">
-              {menu}
-            </div>
-          ))}
-        </div>
+        {/* Menu bar funcional */}
+        <MenuBar
+          onOpenFolder={() => window.dispatchEvent(new Event('nova-open-folder'))}
+          onNewProject={handleScaffold}
+          onSave={handleSave}
+          canSave={!!canSave}
+        />
 
         {/* Center: file name */}
         <div className="flex-1 flex justify-center pointer-events-none">
           <span className="text-[11px] text-gray-600 font-mono">
             {activeTab
-              ? `${projectPath?.split(/[\\/]/).pop() || ''} / ${activeTab.name}${activeTab.isDirty ? ' ●' : ''}`
+              ? `${projectPath?.split(/[\\/]/).pop() || ''} / ${activeTab.name}${canSave ? ' ●' : ''}`
               : 'Nova IDE'}
           </span>
         </div>
@@ -127,9 +130,9 @@ function App() {
           </button>
           <button
             onClick={handleSave}
-            disabled={!activeTab?.isDirty}
+            disabled={!canSave}
             className={`flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-md transition-all
-              ${activeTab?.isDirty
+              ${canSave
                 ? 'bg-primary text-white hover:bg-indigo-500 shadow-[0_0_12px_rgba(99,102,241,0.4)]'
                 : 'bg-white/5 text-gray-600 cursor-not-allowed'}`}
           >
@@ -150,9 +153,15 @@ function App() {
       <div className="flex-1 flex overflow-hidden min-h-0 bg-[#0F0F15]">
         
         {/* LEFT: File Explorer */}
-        <aside className="w-[280px] shrink-0 bg-[#0F0F15] flex flex-col overflow-hidden">
+        <aside
+          className="shrink-0 bg-[#0F0F15] flex flex-col overflow-hidden"
+          style={{ width: explorerWidth }}
+          data-panel="explorer"
+        >
           <FileExplorer />
         </aside>
+
+        <ResizeHandle direction="horizontal" onResize={nudgeExplorer} />
 
         {/* CENTER: Preview + Editor */}
         <main className="flex-1 min-w-0 flex flex-col bg-[#0A0A10] overflow-hidden border-x border-[#1A1A24] shadow-2xl relative z-10">
@@ -160,8 +169,13 @@ function App() {
           <TerminalPanel />
         </main>
 
+        <ResizeHandle direction="horizontal" onResize={nudgeChat} />
+
         {/* RIGHT: Chat / Brain */}
-        <aside className="w-[340px] shrink-0 bg-[#0D0D13] flex flex-col overflow-hidden">
+        <aside
+          className="shrink-0 bg-[#0D0D13] flex flex-col overflow-hidden"
+          style={{ width: chatWidth }}
+        >
           {/* Tab switcher */}
           <div className="flex bg-black/20 border-b border-white/5 shrink-0">
             <button
@@ -181,7 +195,7 @@ function App() {
           </div>
 
           <div className="flex-1 overflow-hidden min-h-0">
-            {rightTab === 'chat' ? <ChatPanel /> : <BrainPanel memoryManager={memoryManager} />}
+            {rightTab === 'chat' ? <ChatPanel /> : <BrainPanel memoryManager={memoryManager} projectPath={projectPath} />}
           </div>
 
           {/* Model selector */}

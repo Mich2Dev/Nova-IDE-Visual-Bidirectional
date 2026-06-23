@@ -1,49 +1,40 @@
-import React from 'react';
 import { useEditor } from '@craftjs/core';
+import { MousePointer2, SlidersHorizontal } from 'lucide-react';
+import { ElementProperties } from './ElementProperties';
+
+function resolveEventId(selected: Set<string> | string | null | undefined): string | null {
+  if (!selected) return null;
+  if (selected instanceof Set) return Array.from(selected)[0] ?? null;
+  if (typeof selected === 'string') return selected;
+  return null;
+}
 
 export const SettingsPanel = () => {
-  const { selected, hasSelectedNode, actions } = useEditor((state, query) => {
-    const currentNodeId = state.events.selected;
-    let selected;
+  const { selectedId, hoveredId } = useEditor((state) => ({
+    selectedId: resolveEventId(state.events.selected),
+    hoveredId: resolveEventId(state.events.hovered),
+  }));
 
-    if (currentNodeId && state.nodes[currentNodeId]) {
-      selected = {
-        id: currentNodeId,
-        name: state.nodes[currentNodeId].data.name,
-        settings: state.nodes[currentNodeId].related?.settings,
-        isDeletable: currentNodeId !== 'ROOT' // La raíz nunca se borra
-      };
-    }
+  const targetId = selectedId ?? hoveredId;
+  const isHoverPreview = !selectedId && !!hoveredId;
 
-    return {
-      selected,
-      hasSelectedNode: state.events.selected != null,
-      actions: query.node // we don't return actions directly, we use useEditor destructured actions
-    };
-  });
+  if (targetId) {
+    return <ElementProperties key={targetId} nodeId={targetId} isHoverPreview={isHoverPreview} />;
+  }
 
-  // Actually useEditor gives us actions directly
-  const { actions: editorActions } = useEditor();
-
-  return hasSelectedNode && selected ? (
-    <div className="p-4 flex flex-col gap-4 overflow-y-auto custom-scrollbar h-full">
-      <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
-        <h3 className="text-xs font-bold text-gray-200">Settings: {selected.name}</h3>
-        {selected.isDeletable && (
-          <button 
-            onClick={() => editorActions.delete(selected.id)}
-            className="text-[10px] bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white px-2 py-1 rounded transition-colors"
-          >
-            Eliminar
-          </button>
-        )}
+  return (
+    <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-white/5 bg-white/[0.02]">
+        <SlidersHorizontal className="h-6 w-6 text-gray-600" />
       </div>
-      {selected.settings && React.createElement(selected.settings)}
-    </div>
-  ) : (
-    <div className="p-4 text-xs text-gray-500 text-center">
-      Selecciona un elemento para editarlo
+      <p className="text-xs font-medium text-gray-300">Personalizar elemento</p>
+      <p className="mt-2 max-w-[200px] text-[10px] leading-relaxed text-gray-500">
+        Pasa el cursor sobre texto, botones o bloques del lienzo para ver sus propiedades.
+      </p>
+      <div className="mt-4 flex items-center gap-1.5 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-[10px] text-blue-300/80">
+        <MousePointer2 className="h-3.5 w-3.5 shrink-0" />
+        Estilo Onlook — hover + clic
+      </div>
     </div>
   );
 };
-

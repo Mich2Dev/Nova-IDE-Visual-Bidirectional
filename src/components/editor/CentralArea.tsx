@@ -5,7 +5,8 @@ import { LivePreview } from './LivePreview';
 import { CodeEditor } from './CodeEditor';
 import { VisualEditor } from './VisualEditor';
 import { TabBar } from './TabBar';
-import { Monitor, Tablet, Smartphone, Columns, Code, Eye, LayoutGrid } from 'lucide-react';
+import { Monitor, Tablet, Smartphone, Columns, Code, Eye, LayoutGrid, FolderOpen } from 'lucide-react';
+import { hasProjectContent } from '../../lib/projectEntry';
 
 const ViewportButton: React.FC<{
   size: ViewportSize;
@@ -54,19 +55,18 @@ const ViewModeButton: React.FC<{
 };
 
 const WelcomeScreen: React.FC = () => {
-  const { projectPath, openTab, setTabContent } = useStore();
+  const { projectPath, openTab } = useStore();
 
   const handleCreateFile = async (filename: string, boilerplate: string) => {
     if (!projectPath) {
-      alert("Por favor abre una carpeta de proyecto primero usando el Explorador.");
+      alert('Por favor abre una carpeta de proyecto primero usando el Explorador.');
       return;
     }
-    
-    // Asumimos que window.novaAPI existe como en ChatPanel
+
     const targetPath = `${projectPath}/${filename}`.replace(/\\/g, '/').replace(/\/\//g, '/');
     const nova = (window as any).novaAPI;
-    
-    if (nova && nova.writeFile) {
+
+    if (nova?.writeFile) {
       const result = await nova.writeFile(targetPath, boilerplate);
       if (result?.success) {
         openTab(targetPath, filename, boilerplate);
@@ -75,51 +75,71 @@ const WelcomeScreen: React.FC = () => {
         alert(`Error creando archivo: ${result?.error}`);
       }
     } else {
-      // Fallback si no está el puente nativo (solo por seguridad)
       openTab(targetPath, filename, boilerplate);
     }
   };
 
-  const createHTML = () => handleCreateFile('index.html', '<!DOCTYPE html>\n<html lang="es">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Mi Proyecto</title>\n  <!-- Tailwind CSS por defecto para maquetación rápida -->\n  <script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body class="bg-gray-100 min-h-screen">\n  \n</body>\n</html>');
-  
+  const createHTML = () => handleCreateFile('index.html', '<!DOCTYPE html>\n<html lang="es">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Mi Proyecto</title>\n  <script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body class="bg-gray-100 min-h-screen">\n  \n</body>\n</html>');
+
   const createReact = () => handleCreateFile('App.tsx', 'import React from "react";\n\nexport default function App() {\n  return (\n    <div className="min-h-screen bg-gray-100">\n      \n    </div>\n  );\n}\n');
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center bg-[#0A0A10] text-gray-400 p-8">
       <div className="max-w-md w-full bg-[#111116] border border-white/5 rounded-2xl p-8 text-center shadow-2xl">
         <h2 className="text-xl font-bold text-gray-200 mb-2">Nova IDE</h2>
-        <p className="text-sm mb-8">Inicializar Proyecto</p>
-        
-        {!projectPath ? (
-          <p className="text-xs text-amber-500 bg-amber-500/10 p-4 rounded-lg">
-            Abre una carpeta de proyecto en el Explorador a la izquierda para comenzar.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <button 
-              onClick={createHTML}
-              className="w-full py-3 px-4 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 rounded-xl text-sm font-medium transition-colors border border-indigo-500/30 flex items-center justify-center gap-2"
-            >
-              <LayoutGrid className="w-4 h-4" />
-              Crear index.html (Clásico / Tailwind)
-            </button>
-            <button 
-              onClick={createReact}
-              className="w-full py-3 px-4 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 rounded-xl text-sm font-medium transition-colors border border-blue-500/30 flex items-center justify-center gap-2"
-            >
-              <Code className="w-4 h-4" />
-              Crear App.tsx (Componente React)
-            </button>
-          </div>
-        )}
+        <p className="text-sm mb-2">Inicializar Proyecto</p>
+        <p className="text-[11px] text-gray-600 mb-8">Esta carpeta está vacía. Crea tu primer archivo para empezar.</p>
+
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={createHTML}
+            className="w-full py-3 px-4 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 rounded-xl text-sm font-medium transition-colors border border-indigo-500/30 flex items-center justify-center gap-2"
+          >
+            <LayoutGrid className="w-4 h-4" />
+            Crear index.html (Clásico / Tailwind)
+          </button>
+          <button
+            onClick={createReact}
+            className="w-full py-3 px-4 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 rounded-xl text-sm font-medium transition-colors border border-blue-500/30 flex items-center justify-center gap-2"
+          >
+            <Code className="w-4 h-4" />
+            Crear App.tsx (Componente React)
+          </button>
+        </div>
       </div>
     </div>
   );
 };
 
+const NoProjectScreen: React.FC = () => (
+  <div className="flex-1 flex flex-col items-center justify-center bg-[#0A0A10] text-gray-400 p-8">
+    <div className="max-w-md w-full bg-[#111116] border border-white/5 rounded-2xl p-8 text-center shadow-2xl">
+      <FolderOpen className="w-10 h-10 mx-auto mb-4 text-gray-600" />
+      <h2 className="text-xl font-bold text-gray-200 mb-2">Nova IDE</h2>
+      <p className="text-sm text-gray-500">Abre una carpeta en el Explorador para comenzar.</p>
+    </div>
+  </div>
+);
+
+const PickFileScreen: React.FC = () => (
+  <div className="flex-1 flex flex-col items-center justify-center bg-[#0A0A10] text-gray-400 p-8">
+    <div className="max-w-md w-full bg-[#111116] border border-white/5 rounded-2xl p-8 text-center shadow-2xl">
+      <h2 className="text-xl font-bold text-gray-200 mb-2">Proyecto abierto</h2>
+      <p className="text-sm text-gray-500">Selecciona un archivo del explorador para editarlo.</p>
+    </div>
+  </div>
+);
+
 export const CentralArea: React.FC = () => {
-  const { viewMode, activeTabId, tabs } = useStore();
+  const { viewMode, activeTabId, tabs, projectPath, fileTree } = useStore();
   const activeTab = tabs.find(t => t.path === activeTabId);
+  const projectEmpty = projectPath ? !hasProjectContent(fileTree) : false;
+
+  const renderEmptyState = () => {
+    if (!projectPath) return <NoProjectScreen />;
+    if (projectEmpty) return <WelcomeScreen />;
+    return <PickFileScreen />;
+  };
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-[#0A0A10]">
@@ -156,7 +176,7 @@ export const CentralArea: React.FC = () => {
       {/* Content area */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {!activeTab ? (
-          <WelcomeScreen />
+          renderEmptyState()
         ) : (
           <>
             {viewMode === 'visual' && <VisualEditor />}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNode } from '@craftjs/core';
+import { NodeControls } from './NodeControls';
 
 interface ImageProps {
   src?: string;
@@ -20,27 +21,20 @@ export const Image = ({
   objectFit = 'cover',
   shadow = 'none',
 }: ImageProps) => {
-  const { connectors: { connect, drag }, isSelected } = useNode((node) => ({
-    isSelected: node.events.selected,
-  }));
-
   return (
-    <div
-      ref={(ref) => { if (ref) connect(drag(ref)); }}
+    <NodeControls
       style={{
         width,
         height,
         borderRadius: `${radius}px`,
         overflow: 'hidden',
         boxShadow: shadow,
-        outline: isSelected ? '2px solid #3b82f6' : '1px solid transparent',
-        outlineOffset: 2,
         display: 'block',
         flexShrink: 0,
       }}
     >
-      <img src={src} alt={alt} style={{ width: '100%', height: '100%', objectFit: objectFit as any, display: 'block' }} />
-    </div>
+      <img src={src} alt={alt} style={{ width: '100%', height: '100%', objectFit: objectFit as React.CSSProperties['objectFit'], display: 'block' }} />
+    </NodeControls>
   );
 };
 
@@ -107,4 +101,8 @@ Image.craft = {
     shadow: 'none',
   },
   related: { settings: ImageSettings },
+  rules: {
+    canDrag: () => true,
+    canDrop: () => false,
+  },
 };

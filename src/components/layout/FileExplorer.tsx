@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import type { FileNode } from '../../store/useStore';
+import { useContextStore } from '../../context/useContextStore';
+import { hasProjectContent, findEntryFile } from '../../lib/projectEntry';
 import {
   FolderOpen, FilePlus, ChevronRight, ChevronDown,
-  File, Folder, FolderOpenIcon, Trash2, RefreshCw
+  Trash2, RefreshCw
 } from 'lucide-react';
 
 const nova = (window as any).novaAPI;
@@ -34,7 +36,7 @@ const FileTreeItem: React.FC<{
   level?: number;
   onRefresh: () => void;
 }> = ({ node, level = 0, onRefresh }) => {
-  const { activeTabId, openTab, projectPath } = useStore();
+  const { activeTabId, openTab } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const [children, setChildren] = useState<FileNode[]>([]);
   const isActive = activeTabId === node.path;
@@ -106,7 +108,7 @@ const FileTreeItem: React.FC<{
 };
 
 export const FileExplorer: React.FC = () => {
-  const { projectPath, fileTree, setProject, setFileTree, activeFileName } = useStore();
+  const { projectPath, setProject } = useStore();
   const [isCreating, setIsCreating] = useState(false);
   const [newFileName, setNewFileName] = useState('');
   const [rootNodes, setRootNodes] = useState<FileNode[]>([]);
@@ -126,13 +128,35 @@ export const FileExplorer: React.FC = () => {
         if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
-    
-    // Start preview server
+
     const serverUrl = await nova.startPreviewServer(folderPath);
     useStore.getState().setPreviewServerUrl(serverUrl);
-    
+
+    const prevPath = useStore.getState().projectPath;
+    if (prevPath !== folderPath) {
+      useStore.getState().clearTabs();
+    }
+
     setProject(folderPath, filtered);
     setRootNodes(filtered);
+
+    if (hasProjectContent(filtered)) {
+      const entry = findEntryFile(filtered);
+      if (entry) {
+        const content = await nova.readFile(entry.path);
+        if (content !== null) {
+          useStore.getState().openTab(entry.path, entry.name, content);
+        }
+      }
+    }
+
+    try {
+      const { refreshDesignProfile } = await import('../../context/collectors/DesignProfileCollector');
+      await refreshDesignProfile(folderPath);
+      useContextStore.getState().bumpDesignProfileVersion();
+    } catch (e) {
+      console.warn('Design profile extraction skipped:', e);
+    }
   };
 
   const refresh = async () => {
@@ -141,8 +165,13 @@ export const FileExplorer: React.FC = () => {
 
   React.useEffect(() => {
     const handleRefresh = () => refresh();
+    const handleOpenFolder = () => openFolder();
     window.addEventListener('nova-refresh-file-tree', handleRefresh);
-    return () => window.removeEventListener('nova-refresh-file-tree', handleRefresh);
+    window.addEventListener('nova-open-folder', handleOpenFolder);
+    return () => {
+      window.removeEventListener('nova-refresh-file-tree', handleRefresh);
+      window.removeEventListener('nova-open-folder', handleOpenFolder);
+    };
   }, [projectPath]);
 
   const handleCreateFile = async () => {

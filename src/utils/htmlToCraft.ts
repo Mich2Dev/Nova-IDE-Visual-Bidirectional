@@ -108,17 +108,31 @@ export const htmlToCraft = (code: string): string => {
       return id;
     };
 
-    // Find the first meaningful container in body
-    const bodyChildren = Array.from(doc.body.children);
-    let rootElement = doc.body;
+    // ROOT contenedor con todos los hijos del body (header, main, footer, etc.)
+    nodes['ROOT'] = {
+      type: { resolvedName: 'Container' },
+      isCanvas: true,
+      props: { padding: 0, width: '100%', background: '#ffffff' },
+      displayName: 'Contenedor',
+      custom: {},
+      hidden: false,
+      nodes: [],
+      linkedNodes: {},
+      parent: null,
+    };
 
-    if (bodyChildren.length === 1 && bodyChildren[0].tagName.toLowerCase() === 'div') {
-       rootElement = bodyChildren[0] as HTMLElement;
+    Array.from(doc.body.childNodes).forEach((child) => {
+      const childId = parseNode(child, 'ROOT');
+      if (childId && childId !== 'ROOT') {
+        nodes['ROOT'].nodes.push(childId);
+      }
+    });
+
+    if (nodes['ROOT'].nodes.length === 0) {
+      delete nodes['ROOT'];
+      parseNode(doc.body, null);
     }
 
-    parseNode(rootElement, null);
-
-    // Si ROOT no tiene children o falló, proveer un fallback mínimo
     if (!nodes['ROOT']) {
        nodes['ROOT'] = {
           type: { resolvedName: 'Container' },

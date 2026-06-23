@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import type { ChatMessage as ChatMessageType } from '../../store/useStore';
-import { Bot, Send, Loader2, Copy, Check, ChevronDown, Zap } from 'lucide-react';
-
-const nova = (window as any).novaAPI;
+import { buildSystemPrompt } from '../../context/NovaContextEngine';
+import { detectIntent } from '../../context/detectIntent';
+import { getTokenBudgetForProvider } from '../../context/compressors/TokenBudget';
+import { Bot, Send, Loader2 } from 'lucide-react';
+import { checkOllamaHealth, chatWithOllama } from '../../lib/ollamaClient';
+import { ChangeProposal, CodePreview } from './NovaProposal';
 
 export const parseCodeBlocks = (text: string): { lang: string; code: string; filename?: string }[] => {
   const pattern = /```(\w+)?\n([\s\S]*?)```/gi;
@@ -48,106 +51,11 @@ const formatText = (text: string) => {
     .trim();
 };
 
-// ─── Code Block Component ────────────────────────────────────────────────────
-const CodeBlock: React.FC<{
-  lang: string;
-  code: string;
-  filename?: string;
-  msgId: string;
-  applied?: boolean;
-}> = ({ lang, code, filename, msgId, applied }) => {
-  const { tabs, activeTabId, setTabContent, markCodeApplied, projectPath } = useStore();
-  const [copied, setCopied] = useState(false);
-  const activeTab = tabs.find(t => t.path === activeTabId);
-
-  const copy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const apply = async () => {
-    let targetPath = activeTabId;
-    let finalFilename = filename;
-
-    if (!finalFilename) {
-      if (projectPath) {
-        // Sugerir extensión basada en el lenguaje
-        const ext = lang === 'html' ? 'html' : lang === 'css' ? 'css' : lang === 'javascript' || lang === 'js' ? 'js' : 'txt';
-        finalFilename = `codigo_${Date.now()}.${ext}`;
-        alert(`Nova no especificó nombre. El archivo se auto-creará como: ${finalFilename}`);
-        targetPath = `${projectPath}/${finalFilename}`.replace(/\\/g, '/').replace(/\/\//g, '/');
-      } else if (!activeTabId) {
-        alert('Abre un proyecto o archivo primero para poder aplicar código.');
-        return;
-      }
-    } else if (projectPath) {
-      targetPath = `${projectPath}/${finalFilename}`.replace(/\\/g, '/').replace(/\/\//g, '/');
-    }
-
-    if (!targetPath) return;
-
-    const result = await nova.writeFile(targetPath, code);
-    if (result?.success) {
-      if (activeTabId === targetPath || tabs.some(t => t.path === targetPath)) {
-         setTabContent(targetPath, code);
-         
-         // Parsear a Visual State si es HTML o React
-         if (lang === 'html' || lang === 'tsx' || lang === 'jsx' || targetPath.endsWith('.html') || targetPath.endsWith('.tsx')) {
-           const { htmlToCraft } = await import('../../utils/htmlToCraft');
-           const parsedVisualState = htmlToCraft(code);
-           if (parsedVisualState) {
-             useStore.getState().updateTabVisualState(targetPath, parsedVisualState);
-           }
-         }
-      }
-      if (finalFilename && projectPath) window.dispatchEvent(new Event('nova-refresh-file-tree'));
-      markCodeApplied(msgId);
-    } else {
-      alert(`Error al aplicar: ${result?.error}`);
-    }
-  };
-
-  const displayName = filename || activeTab?.name || 'archivo';
-
-  return (
-    <div className="mt-2 rounded-lg overflow-hidden border border-white/10">
-      {/* Code block header */}
-      <div className="flex items-center justify-between bg-[#0f172a] px-3 py-1.5">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-wider">{lang}</span>
-          {filename && <span className="text-[9px] text-gray-500 font-mono">{filename}</span>}
-        </div>
-        <div className="flex gap-1.5">
-          <button onClick={copy} className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors px-2 py-0.5 rounded hover:bg-white/5">
-            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-            {copied ? 'Copiado' : 'Copiar'}
-          </button>
-          <button
-            onClick={apply}
-            disabled={applied}
-            className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-all font-medium
-              ${applied
-                ? 'text-emerald-400 bg-emerald-500/10 cursor-default'
-                : 'text-indigo-300 hover:text-white bg-indigo-500/20 hover:bg-indigo-500/40 cursor-pointer'}`}
-          >
-            {applied ? <Check className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
-            {applied ? 'Aplicado' : `Crear/Aplicar a ${displayName}`}
-          </button>
-        </div>
-      </div>
-      {/* Code */}
-      <pre className="bg-[#0D1117] p-3 overflow-x-auto text-[11px] leading-relaxed font-mono text-gray-300 max-h-64">
-        <code>{code}</code>
-      </pre>
-    </div>
-  );
-};
-
 // ─── Chat Message ────────────────────────────────────────────────────────────
 const ChatMessageItem: React.FC<{ msg: ChatMessageType }> = ({ msg }) => {
-  const codeBlocks = parseCodeBlocks(msg.content);
+  const blocks = msg.codeBlocks ?? parseCodeBlocks(msg.content);
   const textOnly = formatText(msg.content);
+  const hasProposal = msg.role === 'nova' && blocks.length > 0;
 
   if (msg.role === 'system') {
     return (
@@ -178,92 +86,39 @@ const ChatMessageItem: React.FC<{ msg: ChatMessageType }> = ({ msg }) => {
         {textOnly && (
           <p dangerouslySetInnerHTML={{ __html: textOnly }} />
         )}
-        {codeBlocks.map((block, i) => (
-          <CodeBlock key={i} lang={block.lang} code={block.code} filename={block.filename} msgId={msg.id} applied={msg.applied} />
+        {hasProposal && <ChangeProposal msg={msg} blocks={blocks} />}
+        {blocks.map((block, i) => (
+          <CodePreview key={i} block={block} index={i} />
         ))}
       </div>
     </div>
   );
 };
 
-// ─── Build Ollama context ────────────────────────────────────────────────────
-const formatFileTree = (nodes: any[], prefix = ''): string => {
-  let result = '';
-  for (const node of nodes) {
-    if (node.kind === 'directory') {
-      result += `${prefix}📁 ${node.name}/\n`;
-      if (node.children) {
-        result += formatFileTree(node.children, prefix + '  ');
-      }
-    } else {
-      result += `${prefix}📄 ${node.name}\n`;
-    }
-  }
-  return result;
-};
-
-const buildSystemPrompt = (
-  tabs: any[],
-  activeTabId: string | null,
-  projectPath: string | null,
-  fileTree: any[],
-  visualState: string | null
-) => {
-  const projectName = projectPath ? projectPath.split(/[\\/]/).pop() : 'sin proyecto';
-  const activeTab = tabs.find(t => t.path === activeTabId);
-  const openTabsContext = tabs.map(t => `${t.name} (${t.path})`).join(', ') || 'ninguna';
-  
-  return `Eres Nova, una IA especializada en desarrollo web frontend y backend que actúa como copiloto de ${projectName}.
-
-CAPACIDADES:
-- Eres capaz de crear sistemas completos. Genera TODOS los archivos necesarios.
-- IMPORTANTE: Para que yo pueda crear el archivo automáticamente, DEBES usar el siguiente formato estricto:
-
-### ARCHIVO: nombre_del_archivo.ext
-\`\`\`lenguaje
-[código completo aquí]
-\`\`\`
-
-- REGLA: Siempre incluye la cabecera "### ARCHIVO: <nombre>" antes del bloque de código.
-- Usa la ruta correcta si creas archivos dentro de subcarpetas (ej. src/utils.js).
-- Cuando modificas algo, devuelve el archivo COMPLETO modificado, no fragmentos.
-- Sé directo y no des explicaciones largas. Solo genera los archivos.
-
-ESTADO ACTUAL DEL PROYECTO:
-- Proyecto: ${projectName}
-- Pestañas abiertas: ${openTabsContext}
-- Archivo activo: ${activeTab ? activeTab.name : 'ninguno'}
-
-ÁRBOL DE ARCHIVOS:
-${formatFileTree(fileTree) || 'El proyecto está vacío o no hay carpeta abierta.'}
-
-${visualState ? `
-ESTADO DEL EDITOR VISUAL (DISEÑO):
-El usuario está usando el editor visual drag & drop (Craft.js). Aquí está el árbol JSON actual de la interfaz:
-\`\`\`json
-${visualState.substring(0, 8000)}${visualState.length > 8000 ? '\n... (truncado)' : ''}
-\`\`\`
-¡Entiende esta estructura para sugerir cambios visuales o responder preguntas sobre la UI!
-` : ''}
-
-${activeTab ? `
-CONTENIDO DEL ARCHIVO ACTIVO (${activeTab.name}):
-\`\`\`${activeTab.language}
-${activeTab.content.substring(0, 8000)}${activeTab.content.length > 8000 ? '\n... (truncado)' : ''}
-\`\`\`` : ''}`;
-};
-
 // ─── Chat Panel ─────────────────────────────────────────────────────────────
 export const ChatPanel: React.FC = () => {
   const {
     messages, addMessage, isTyping, setIsTyping,
-    tabs, activeTabId, fileTree, projectPath, ollamaModel
+    tabs, activeTabId, fileTree, projectPath, ollamaModel,
+    viewMode, viewportSize, previewServerUrl, terminalOutput,
   } = useStore();
-  const activeTab = tabs.find(t => t.path === activeTabId);
-  const visualState = activeTab?.visualState || null;
   const [input, setInput] = useState('');
+  const [ollamaStatus, setOllamaStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [statusHint, setStatusHint] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const ollamaUrl = import.meta.env.VITE_OLLAMA_URL || 'http://127.0.0.1:11434';
+
+  useEffect(() => {
+    const check = async () => {
+      const health = await checkOllamaHealth(ollamaUrl);
+      setOllamaStatus(health.ok ? 'online' : 'offline');
+    };
+    check();
+    const interval = setInterval(check, 15000);
+    return () => clearInterval(interval);
+  }, [ollamaUrl, ollamaModel]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -275,21 +130,57 @@ export const ChatPanel: React.FC = () => {
     setInput('');
     addMessage({ role: 'user', content: text });
     setIsTyping(true);
+    setStatusHint('Preparando contexto...');
+
+    const OLLAMA_URL = ollamaUrl;
+
+    const historyForModel = [
+      ...messages.filter((m) => m.role !== 'system'),
+      { role: 'user' as const, content: text },
+    ];
 
     try {
-      const systemPrompt = buildSystemPrompt(tabs, activeTabId, projectPath, fileTree, visualState);
+      const intent = detectIntent(text, viewMode);
+      const contextPromise = buildSystemPrompt({
+        intent,
+        userMessage: text,
+        projectPath,
+        fileTree,
+        tabs,
+        activeTabId,
+        viewMode,
+        viewportSize,
+        previewServerUrl,
+        terminalOutput,
+        tokenBudget: getTokenBudgetForProvider(),
+      });
+      const contextTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout preparando contexto (30s)')), 30000)
+      );
+      const { systemPrompt, screenshotBase64 } = await Promise.race([contextPromise, contextTimeout]);
 
+      setStatusHint('Esperando respuesta de Nova...');
       let responseText = '';
       const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+      const AI_PROVIDER = import.meta.env.VITE_AI_PROVIDER || 'auto';
+      const useGemini = AI_PROVIDER === 'gemini' || (AI_PROVIDER === 'auto' && !!GEMINI_KEY);
 
-      if (GEMINI_KEY) {
-        // Usa Gemini si hay llave
-        const contents = messages
-          .filter(m => m.role !== 'system')
-          .map(m => ({
-            role: m.role === 'nova' ? 'model' : 'user',
-            parts: [{ text: m.content }]
-          }));
+      if (useGemini && GEMINI_KEY) {
+        const contents = historyForModel.map((m, i) => {
+          const isLastUser = m.role === 'user' && i === historyForModel.length - 1;
+          const role = m.role === 'nova' ? 'model' : 'user';
+          if (isLastUser && screenshotBase64 && (intent === 'visual_edit' || intent === 'redesign')) {
+            const raw = screenshotBase64.replace(/^data:image\/\w+;base64,/, '');
+            return {
+              role,
+              parts: [
+                { text: m.content },
+                { inlineData: { mimeType: 'image/jpeg', data: raw } },
+              ],
+            };
+          }
+          return { role, parts: [{ text: m.content }] };
+        });
 
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
           method: 'POST',
@@ -303,41 +194,61 @@ export const ChatPanel: React.FC = () => {
         const data = await res.json();
         responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '(sin respuesta de gemini)';
       } else {
-        // Fallback a Ollama local
+        const health = await checkOllamaHealth(OLLAMA_URL);
+        if (!health.ok) throw new Error(health.error || 'Ollama no responde');
+        if (health.models && !health.models.some((m) => m === ollamaModel || m.startsWith(`${ollamaModel}:`))) {
+          throw new Error(`Modelo "${ollamaModel}" no encontrado. Instalado: ${health.models.slice(0, 5).join(', ') || 'ninguno'}`);
+        }
+
         const ollamaMessages = [
           { role: 'system', content: systemPrompt },
-          ...messages
-            .filter(m => m.role !== 'system')
-            .map(m => ({ role: m.role === 'nova' ? 'assistant' : 'user', content: m.content })),
-          { role: 'user', content: text },
+          ...historyForModel.map((m, i) => {
+            const isLastUser = m.role === 'user' && i === historyForModel.length - 1;
+            if (isLastUser && screenshotBase64 && (intent === 'visual_edit' || intent === 'redesign')) {
+              return {
+                role: 'user',
+                content: m.content,
+                images: [screenshotBase64.replace(/^data:image\/\w+;base64,/, '')],
+              };
+            }
+            return {
+              role: m.role === 'nova' ? 'assistant' : 'user',
+              content: m.content,
+            };
+          }),
         ];
 
-        const res = await fetch('http://localhost:11434/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: ollamaModel,
-            messages: ollamaMessages,
-            stream: false,
-          }),
+        const result = await chatWithOllama({
+          url: OLLAMA_URL,
+          model: ollamaModel,
+          messages: ollamaMessages,
         });
-        if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
-        const data = await res.json();
-        responseText = data.message?.content || '(sin respuesta de ollama)';
+        if (!result.success) throw new Error(result.error || 'Error desconocido');
+        responseText = result.content || '(sin respuesta de ollama)';
+        setOllamaStatus('online');
       }
 
+      if (!responseText.trim() || responseText === '(sin respuesta de ollama)') {
+        throw new Error('Ollama devolvió respuesta vacía. Prueba un modelo más capaz o un mensaje más corto.');
+      }
+
+      const blocks = parseCodeBlocks(responseText);
       addMessage({
         role: 'nova',
         content: responseText,
-        codeBlocks: parseCodeBlocks(responseText),
+        codeBlocks: blocks,
+        proposalStatus: blocks.length > 0 ? 'pending' : undefined,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setOllamaStatus('offline');
       addMessage({
         role: 'system',
-        content: `❌ Error conectando a Ollama: ${err.message}. ¿Está Ollama corriendo? Ejecuta: ollama run ${ollamaModel}`,
+        content: `❌ Error con Ollama: ${msg}\n\nVerifica:\n1. Ollama está corriendo (ícono en bandeja)\n2. Modelo "${ollamaModel}" instalado → ollama pull ${ollamaModel}\n3. URL: ${OLLAMA_URL}`,
       });
     } finally {
       setIsTyping(false);
+      setStatusHint('');
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   };
@@ -358,9 +269,13 @@ export const ChatPanel: React.FC = () => {
         </div>
         <div>
           <p className="text-[12px] font-bold text-gray-200">Nova</p>
-          <p className="text-[9px] text-gray-600 uppercase tracking-wider">{ollamaModel} · local</p>
+          <p className="text-[9px] text-gray-600 uppercase tracking-wider">{ollamaModel} · {ollamaStatus === 'online' ? 'conectado' : ollamaStatus === 'checking' ? 'verificando...' : 'desconectado'}</p>
         </div>
-        <div className="ml-auto w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.6)]" title="Ollama conectado" />
+        <div className={`ml-auto w-2 h-2 rounded-full ${
+          ollamaStatus === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.6)]' :
+          ollamaStatus === 'checking' ? 'bg-amber-500 animate-pulse' :
+          'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
+        }`} title={ollamaStatus === 'online' ? 'Ollama conectado' : 'Ollama no responde'} />
       </div>
 
       {/* Messages */}
@@ -371,10 +286,13 @@ export const ChatPanel: React.FC = () => {
             <div className="w-5 h-5 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
               <Bot className="w-3 h-3 text-primary" />
             </div>
-            <div className="flex gap-1 items-center">
-              <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:0ms]" />
-              <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:150ms]" />
-              <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:300ms]" />
+            <div className="flex flex-col gap-0.5">
+              <div className="flex gap-1 items-center">
+                <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce [animation-delay:300ms]" />
+              </div>
+              {statusHint && <span className="text-[10px] text-gray-500">{statusHint}</span>}
             </div>
           </div>
         )}
@@ -406,7 +324,7 @@ export const ChatPanel: React.FC = () => {
             {isTyping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </button>
         </div>
-        <p className="text-[9px] text-gray-700 mt-1.5 text-center">Enter para enviar · Nova edita archivos reales</p>
+        <p className="text-[9px] text-gray-700 mt-1.5 text-center">Enter para enviar · Acepta o rechaza los cambios propuestos</p>
       </div>
     </div>
   );

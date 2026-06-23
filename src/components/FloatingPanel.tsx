@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, useDragControls, useMotionValue, useAnimation } from 'framer-motion';
+import { motion, useDragControls, useAnimation } from 'framer-motion';
 import { GripHorizontal, Minus, Maximize2 } from 'lucide-react';
 
 interface FloatingPanelProps {
@@ -27,7 +27,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
         onBringToFront(id);
     };
 
-    const handleDragEnd = (event: any, info: any) => {
+    const handleDragEnd = (_event: unknown, info: { point: { x: number } }) => {
         const dropX = info.point.x;
         const screenW = window.innerWidth;
         

@@ -8,6 +8,8 @@ export type FileNode = {
   isOpen?: boolean;
 };
 
+export type ProposalStatus = 'pending' | 'accepted' | 'rejected';
+
 export type ChatMessage = {
   id: string;
   role: 'user' | 'nova' | 'system';
@@ -15,6 +17,7 @@ export type ChatMessage = {
   timestamp: number;
   codeBlocks?: { lang: string; code: string; filename?: string }[];
   applied?: boolean;
+  proposalStatus?: ProposalStatus;
 };
 
 export type ViewMode = 'preview' | 'split' | 'code' | 'visual';
@@ -23,10 +26,9 @@ export type ViewportSize = 375 | 768 | 1440 | 0; // 0 = libre
 export type TabNode = {
   path: string;
   name: string;
-  content: string;
+  content: string; // Contenido persistido (disco / último guardado)
   language: 'html' | 'css' | 'js' | 'ts' | 'json' | 'text';
   isDirty: boolean;
-  visualState?: string; // Estado de Craft.js guardado por archivo
 };
 
 interface NovaStore {
@@ -35,6 +37,7 @@ interface NovaStore {
   fileTree: FileNode[];
   setProject: (path: string, tree: FileNode[]) => void;
   setFileTree: (tree: FileNode[]) => void;
+  clearTabs: () => void;
 
   // Tabs
   tabs: TabNode[];
@@ -43,8 +46,9 @@ interface NovaStore {
   closeTab: (path: string) => void;
   setActiveTab: (path: string) => void;
   setTabContent: (path: string, content: string) => void;
+  setPersistedContent: (path: string, content: string) => void;
   markTabClean: (path: string) => void;
-  updateTabVisualState: (path: string, state: string) => void;
+  markTabDirty: (path: string) => void;
 
   // Preview
   previewServerUrl: string | null;
@@ -60,6 +64,7 @@ interface NovaStore {
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   setIsTyping: (v: boolean) => void;
   markCodeApplied: (msgId: string) => void;
+  setProposalStatus: (msgId: string, status: ProposalStatus) => void;
 
   // Visual Editor State (Retained as fallback or getter if needed, but best removed)
   // Terminal
@@ -86,12 +91,13 @@ const getLanguage = (filename: string): TabNode['language'] => {
   return 'text';
 };
 
-export const useStore = create<NovaStore>((set, get) => ({
+export const useStore = create<NovaStore>((set) => ({
   // Project
   projectPath: null,
   fileTree: [],
   setProject: (path, tree) => set({ projectPath: path, fileTree: tree }),
   setFileTree: (tree) => set({ fileTree: tree }),
+  clearTabs: () => set({ tabs: [], activeTabId: null }),
 
   // Tabs
   tabs: [],
@@ -123,11 +129,15 @@ export const useStore = create<NovaStore>((set, get) => ({
   setTabContent: (path, content) => set(state => ({
     tabs: state.tabs.map(t => t.path === path ? { ...t, content, isDirty: true } : t)
   })),
+  setPersistedContent: (path, content) => set(state => ({
+    tabs: state.tabs.map(t => t.path === path ? { ...t, content, isDirty: false } : t)
+  })),
   markTabClean: (path) => set(state => ({
     tabs: state.tabs.map(t => t.path === path ? { ...t, isDirty: false } : t)
   })),
-
-  // Preview
+  markTabDirty: (path) => set(state => ({
+    tabs: state.tabs.map(t => t.path === path ? { ...t, isDirty: true } : t)
+  })),
   previewServerUrl: null,
   setPreviewServerUrl: (url) => set({ previewServerUrl: url }),
   viewMode: 'split',
@@ -140,7 +150,7 @@ export const useStore = create<NovaStore>((set, get) => ({
     {
       id: '0',
       role: 'nova',
-      content: '👋 Hola. Soy Nova. Abre una carpeta de proyecto para comenzar. Puedes pedirme que cree, edite o explique cualquier archivo.',
+      content: '👋 Hola, soy Nova — tu copiloto de código en este IDE.\n\nPídeme crear una página, editar archivos, explicar código o arreglar errores. Cuando proponga cambios, solo tendrás que **Aceptar** o **Rechazar** — yo me encargo del resto.',
       timestamp: Date.now(),
     }
   ],
@@ -150,15 +160,17 @@ export const useStore = create<NovaStore>((set, get) => ({
   })),
   setIsTyping: (v) => set({ isTyping: v }),
   markCodeApplied: (msgId) => set(state => ({
-    messages: state.messages.map(m => m.id === msgId ? { ...m, applied: true } : m)
+    messages: state.messages.map(m => m.id === msgId ? { ...m, applied: true, proposalStatus: 'accepted' as const } : m)
+  })),
+  setProposalStatus: (msgId, status) => set(state => ({
+    messages: state.messages.map(m => m.id === msgId ? {
+      ...m,
+      proposalStatus: status,
+      applied: status === 'accepted',
+    } : m)
   })),
 
-  // Visual Editor State
-  updateTabVisualState: (path, visualState) => set(state => ({
-    tabs: state.tabs.map(t => t.path === path ? { ...t, visualState } : t)
-  })),
-
-  // Terminal
+  // Preview
   terminalOutput: [],
   terminalVisible: false,
   addTerminalLine: (line) => set(state => ({
@@ -170,7 +182,9 @@ export const useStore = create<NovaStore>((set, get) => ({
   // Ollama
   ollamaModel: (() => {
     const saved = localStorage.getItem('nova_ollama_model');
-    return (saved && saved !== 'llama3') ? saved : 'llama3.2:3b';
+    const fromEnv = import.meta.env.VITE_OLLAMA_MODEL as string | undefined;
+    if (saved) return saved;
+    return fromEnv || 'gemma3:4b';
   })(),
   setOllamaModel: (model) => {
     localStorage.setItem('nova_ollama_model', model);

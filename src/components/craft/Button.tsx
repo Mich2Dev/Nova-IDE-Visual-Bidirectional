@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNode } from '@craftjs/core';
+import { NodeControls } from './NodeControls';
 
 interface ButtonProps {
   text?: string;
@@ -14,6 +15,8 @@ interface ButtonProps {
   border?: string;
   borderColor?: string;
   full?: boolean;
+  width?: string;
+  height?: string;
   variant?: string;
   href?: string;
   className?: string;
@@ -32,13 +35,11 @@ export const Button = ({
   border = '0',
   borderColor = 'transparent',
   full = false,
+  width = 'auto',
+  height = 'auto',
   variant = 'solid',
   className = '',
 }: ButtonProps) => {
-  const { connectors: { connect, drag }, isSelected } = useNode((node) => ({
-    isSelected: node.events.selected,
-  }));
-
   const styles: React.CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
@@ -52,23 +53,34 @@ export const Button = ({
     boxShadow: variant === 'solid' ? shadow : 'none',
     border: variant === 'solid' ? (border !== '0' ? `${border}px solid ${borderColor}` : 'none') : `2px solid ${background}`,
     cursor: 'pointer',
-    width: full ? '100%' : 'auto',
-    outline: isSelected ? '2px solid #3b82f6' : '1px solid transparent',
-    outlineOffset: 3,
+    width: full ? '100%' : '100%',
+    height: height === 'auto' ? 'auto' : height,
+    minHeight: height === 'auto' ? undefined : height,
     transition: 'all 0.2s',
     userSelect: 'none',
     fontFamily: 'inherit',
     letterSpacing: '0.01em',
+    boxSizing: 'border-box',
   };
 
   return (
-    <button
-      ref={(ref) => { if (ref) connect(drag(ref)); }}
-      style={styles}
-      className={`hover:opacity-90 active:scale-95 ${className}`}
+    <NodeControls
+      style={{
+        width: full ? '100%' : width,
+        height: height === 'auto' ? 'auto' : height,
+        display: full ? 'block' : 'inline-block',
+        maxWidth: '100%',
+      }}
+      resizable={!full}
     >
-      {text}
-    </button>
+      <button
+        type="button"
+        style={styles}
+        className={`w-full hover:opacity-90 active:scale-95 ${className}`}
+      >
+        {text}
+      </button>
+    </NodeControls>
   );
 };
 
@@ -161,6 +173,12 @@ Button.craft = {
     shadow: '0 4px 14px rgba(99,102,241,0.4)',
     variant: 'solid',
     full: false,
+    width: 'auto',
+    height: 'auto',
+  },
+  rules: {
+    canDrag: () => true,
+    canDrop: () => false,
   },
   related: { settings: ButtonSettings },
 };

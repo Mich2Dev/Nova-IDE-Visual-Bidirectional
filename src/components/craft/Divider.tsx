@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNode } from '@craftjs/core';
+import { NodeControls } from './NodeControls';
 
 interface DividerProps {
   color?: string;
@@ -16,26 +17,15 @@ export const Divider = ({
   marginY = 16,
   width = '100%',
 }: DividerProps) => {
-  const { connectors: { connect, drag }, isSelected } = useNode((node) => ({
-    isSelected: node.events.selected,
-  }));
-
   return (
-    <div
-      ref={(ref) => { if (ref) connect(drag(ref)); }}
-      style={{
-        margin: `${marginY}px 0`,
-        width,
-        outline: isSelected ? '2px solid #3b82f6' : 'none',
-        outlineOffset: 4,
-      }}
-    >
+    <NodeControls style={{ margin: `${marginY}px 0`, width }} resizable={{ width: true, height: false }}>
       <hr style={{
         border: 'none',
         borderTop: `${thickness}px ${lineStyle} ${color}`,
         margin: 0,
+        width: '100%',
       }} />
-    </div>
+    </NodeControls>
   );
 };
 
@@ -82,4 +72,8 @@ Divider.craft = {
   displayName: 'Separador',
   props: { color: '#e2e8f0', thickness: 1, style: 'solid', marginY: 16, width: '100%' },
   related: { settings: DividerSettings },
+  rules: {
+    canDrag: () => true,
+    canDrop: () => false,
+  },
 };

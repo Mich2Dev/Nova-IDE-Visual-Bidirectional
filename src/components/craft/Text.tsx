@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNode } from '@craftjs/core';
+import { NodeControls } from './NodeControls';
 
 interface TextProps {
   text?: string;
@@ -13,6 +14,8 @@ interface TextProps {
   fontFamily?: string;
   italic?: boolean;
   underline?: boolean;
+  width?: string;
+  height?: string;
   className?: string;
 }
 
@@ -28,9 +31,11 @@ export const Text = ({
   fontFamily = 'inherit',
   italic = false,
   underline = false,
+  width = 'auto',
+  height = 'auto',
   className = '',
 }: TextProps) => {
-  const { connectors: { connect, drag }, isSelected, actions: { setProp } } = useNode((node) => ({
+  const { isSelected, actions: { setProp } } = useNode((node) => ({
     isSelected: node.events.selected,
   }));
 
@@ -40,42 +45,52 @@ export const Text = ({
     if (!isSelected) setEditable(false);
   }, [isSelected]);
 
-  const Tag = tag as any;
+  const Tag = tag as React.ElementType;
 
   return (
-    <Tag
-      className={className}
-      ref={(ref: HTMLElement | null) => { if (ref) connect(drag(ref)); }}
-      onClick={() => { if (isSelected) setEditable(true); }}
-      onBlur={(e: React.FocusEvent<HTMLElement>) => {
-        setProp((props: any) => props.text = e.currentTarget.innerText);
-        setEditable(false);
-      }}
-      contentEditable={editable}
-      suppressContentEditableWarning
+    <NodeControls
       style={{
-        fontSize: `${fontSize}px`,
-        fontWeight,
-        textAlign: textAlign as any,
-        color,
-        lineHeight,
-        letterSpacing: `${letterSpacing}px`,
-        fontFamily,
-        fontStyle: italic ? 'italic' : 'normal',
-        textDecoration: underline ? 'underline' : 'none',
-        outline: editable ? '2px dashed #6366f1' : isSelected ? '2px solid #3b82f6' : '1px solid transparent',
-        outlineOffset: 2,
-        borderRadius: 2,
-        padding: '2px 4px',
-        margin: 0,
-        cursor: editable ? 'text' : 'default',
-        minWidth: 20,
-        transition: 'outline 0.1s',
+        width,
+        height: height === 'auto' ? 'auto' : height,
+        minHeight: height === 'auto' ? undefined : height,
         display: 'block',
+        maxWidth: '100%',
       }}
     >
-      {text}
-    </Tag>
+      <Tag
+        className={className}
+        onClick={() => { if (isSelected) setEditable(true); }}
+        onBlur={(e: React.FocusEvent<HTMLElement>) => {
+          setProp((props: Record<string, unknown>) => { props.text = e.currentTarget.innerText; });
+          setEditable(false);
+        }}
+        contentEditable={editable}
+        suppressContentEditableWarning
+        style={{
+          fontSize: `${fontSize}px`,
+          fontWeight,
+          textAlign: textAlign as React.CSSProperties['textAlign'],
+          color,
+          lineHeight,
+          letterSpacing: `${letterSpacing}px`,
+          fontFamily,
+          fontStyle: italic ? 'italic' : 'normal',
+          textDecoration: underline ? 'underline' : 'none',
+          outline: editable ? '2px dashed #6366f1' : 'none',
+          borderRadius: 2,
+          padding: '2px 4px',
+          margin: 0,
+          cursor: editable ? 'text' : 'default',
+          minWidth: 20,
+          width: '100%',
+          height: '100%',
+          boxSizing: 'border-box',
+          display: 'block',
+        }}
+      >
+        {text}
+      </Tag>
+    </NodeControls>
   );
 };
 
@@ -225,6 +240,12 @@ Text.craft = {
     fontFamily: 'inherit',
     italic: false,
     underline: false,
+    width: 'auto',
+    height: 'auto',
+  },
+  rules: {
+    canDrag: () => true,
+    canDrop: () => false,
   },
   related: {
     settings: TextSettings,

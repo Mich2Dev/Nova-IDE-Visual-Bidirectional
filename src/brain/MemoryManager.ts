@@ -1,78 +1,79 @@
-import type { Episode, Pattern, Principle, KnowledgeGap } from './types';
+import type { Episode, Pattern, Principle } from './types';
+
+const nova = (window as any).novaAPI;
 
 export class MemoryManager {
-    private dirHandle: any = null;
+  private projectPath: string;
 
-    constructor(directoryHandle: any) {
-        this.dirHandle = directoryHandle;
-    }
+  constructor(projectPath: string) {
+    this.projectPath = projectPath;
+  }
 
-    private async getBrainDir() {
-        if (!this.dirHandle) throw new Error("No directory handle");
-        const novaDir = await this.dirHandle.getDirectoryHandle('.nova', { create: true });
-        const brainDir = await novaDir.getDirectoryHandle('brain', { create: true });
-        return brainDir;
+  private async readJsonFile<T>(filename: string, defaultValue: T): Promise<T> {
+    try {
+      const data = await nova?.brainReadJson?.(this.projectPath, filename);
+      return data ?? defaultValue;
+    } catch (e) {
+      console.error(`Error reading brain/${filename}:`, e);
+      return defaultValue;
     }
+  }
 
-    private async getFileHandle(filename: string) {
-        const brainDir = await this.getBrainDir();
-        return await brainDir.getFileHandle(filename, { create: true });
+  private async writeJsonFile<T>(filename: string, data: T): Promise<void> {
+    try {
+      await nova?.brainWriteJson?.(this.projectPath, filename, data);
+    } catch (e) {
+      console.error(`Error writing brain/${filename}:`, e);
     }
+  }
 
-    private async readJsonFile<T>(filename: string, defaultValue: T): Promise<T> {
-        try {
-            const fileHandle = await this.getFileHandle(filename);
-            const file = await fileHandle.getFile();
-            const content = await file.text();
-            if (!content.trim()) return defaultValue;
-            return JSON.parse(content) as T;
-        } catch (e) {
-            console.error(`Error reading ${filename}:`, e);
-            return defaultValue;
-        }
-    }
+  async getEpisodes(): Promise<Episode[]> {
+    return this.readJsonFile<Episode[]>('episodes.json', []);
+  }
 
-    private async writeJsonFile<T>(filename: string, data: T): Promise<void> {
-        try {
-            const fileHandle = await this.getFileHandle(filename);
-            const writable = await fileHandle.createWritable();
-            await writable.write(JSON.stringify(data, null, 2));
-            await writable.close();
-        } catch (e) {
-            console.error(`Error writing ${filename}:`, e);
-        }
-    }
+  async addEpisode(episode: Episode): Promise<void> {
+    const episodes = await this.getEpisodes();
+    episodes.push(episode);
+    // Keep last 50 episodes max
+    const trimmed = episodes.slice(-50);
+    await this.writeJsonFile('episodes.json', trimmed);
+  }
 
-    // -- Episodes --
-    async getEpisodes(): Promise<Episode[]> {
-        return this.readJsonFile<Episode[]>('episodes.json', []);
-    }
+  async getPatterns(): Promise<Pattern[]> {
+    return this.readJsonFile<Pattern[]>('patterns.json', []);
+  }
 
-    async addEpisode(episode: Episode): Promise<void> {
-        const episodes = await this.getEpisodes();
-        episodes.push(episode);
-        await this.writeJsonFile('episodes.json', episodes);
-    }
+  async addPattern(pattern: Pattern): Promise<void> {
+    const patterns = await this.getPatterns();
+    patterns.push(pattern);
+    await this.writeJsonFile('patterns.json', patterns);
+  }
 
-    // -- Patterns --
-    async getPatterns(): Promise<Pattern[]> {
-        return this.readJsonFile<Pattern[]>('patterns.json', []);
-    }
+  async updatePattern(patternId: string, updates: Partial<Pattern>): Promise<void> {
+    const patterns = await this.getPatterns();
+    const idx = patterns.findIndex((p) => p.id === patternId);
+    if (idx === -1) return;
+    patterns[idx] = { ...patterns[idx], ...updates, updatedAt: Date.now() };
+    await this.writeJsonFile('patterns.json', patterns);
+  }
 
-    async addPattern(pattern: Pattern): Promise<void> {
-        const patterns = await this.getPatterns();
-        patterns.push(pattern);
-        await this.writeJsonFile('patterns.json', patterns);
-    }
+  async approvePattern(patternId: string): Promise<void> {
+    await this.updatePattern(patternId, { isApproved: true });
+  }
 
-    // -- Principles --
-    async getPrinciples(): Promise<Principle[]> {
-        return this.readJsonFile<Principle[]>('principles.json', []);
-    }
+  async rejectPattern(patternId: string): Promise<void> {
+    const patterns = await this.getPatterns();
+    const filtered = patterns.filter((p) => p.id !== patternId);
+    await this.writeJsonFile('patterns.json', filtered);
+  }
 
-    async addPrinciple(principle: Principle): Promise<void> {
-        const principles = await this.getPrinciples();
-        principles.push(principle);
-        await this.writeJsonFile('principles.json', principles);
-    }
+  async getPrinciples(): Promise<Principle[]> {
+    return this.readJsonFile<Principle[]>('principles.json', []);
+  }
+
+  async addPrinciple(principle: Principle): Promise<void> {
+    const principles = await this.getPrinciples();
+    principles.push(principle);
+    await this.writeJsonFile('principles.json', principles);
+  }
 }

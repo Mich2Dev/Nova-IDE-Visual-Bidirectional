@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNode } from '@craftjs/core';
+import { NodeControls } from './NodeControls';
 
 interface ContainerProps {
   background?: string;
@@ -36,31 +37,29 @@ export const Container = ({
   children,
   className = '',
 }: ContainerProps) => {
-  const { connectors: { connect, drag }, isSelected } = useNode((node) => ({
+  const { isSelected } = useNode((node) => ({
     isSelected: node.events.selected,
   }));
 
   return (
-    <div
-      ref={(ref) => { if (ref) connect(drag(ref)); }}
+    <NodeControls
       style={{
         background,
         padding: `${padding}px`,
         borderRadius: `${radius}px`,
         width,
         minHeight: height === 'auto' ? '60px' : height,
+        height: height === 'auto' ? undefined : height,
         display,
-        flexDirection: flexDir as any,
+        flexDirection: flexDir as React.CSSProperties['flexDirection'],
         alignItems,
         justifyContent,
         gap: `${gap}px`,
         boxShadow: shadow,
         border: border !== '0' ? `${border}px solid ${borderColor}` : undefined,
-        position: 'relative',
-        boxSizing: 'border-box',
-        transition: 'outline 0.1s',
+        transition: 'box-shadow 0.1s',
       }}
-      className={`${isSelected ? 'outline outline-2 outline-blue-500' : 'outline outline-1 outline-transparent hover:outline-blue-300'} ${className}`}
+      className={`${className} ${isSelected ? 'ring-0' : 'hover:shadow-[inset_0_0_0_1px_rgba(59,130,246,0.25)]'}`.trim()}
     >
       {children}
       {!children && (
@@ -73,7 +72,7 @@ export const Container = ({
           </span>
         </div>
       )}
-    </div>
+    </NodeControls>
   );
 };
 

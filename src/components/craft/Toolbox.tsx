@@ -1,4 +1,3 @@
-import React from 'react';
 import { useEditor, Element } from '@craftjs/core';
 import { Container } from './Container';
 import { Text } from './Text';
@@ -15,7 +14,7 @@ export const Toolbox = () => {
       type="button"
       title={`Arrastrar ${label}`}
       aria-label={`Herramienta para añadir ${label}`}
-      className="flex flex-col items-center justify-center gap-2 p-3 border border-white/5 rounded-xl bg-[#111116] hover:bg-white/5 cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary/50 hover:border-primary/50 text-xs transition-all hover:shadow-[0_0_15px_rgba(99,102,241,0.15)] group"
+      className="flex flex-col items-center justify-center gap-1.5 p-2.5 border border-white/5 rounded-lg bg-[#111116] hover:bg-white/5 cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary/50 hover:border-primary/50 text-xs transition-all group"
       ref={(ref) => { 
         if (ref) {
           if (createFn) connectors.create(ref, createFn());
@@ -30,11 +29,7 @@ export const Toolbox = () => {
 
   return (
     <div className="flex flex-col h-full bg-[#0D0D13]">
-      <div className="p-3 border-b border-white/5 bg-black/20">
-        <h3 className="text-[11px] font-bold tracking-widest text-gray-400 uppercase">Elementos</h3>
-      </div>
-      
-      <div className="p-3 grid grid-cols-2 gap-3 overflow-y-auto custom-scrollbar">
+      <div className="p-3 grid grid-cols-2 gap-2 overflow-y-auto custom-scrollbar">
         
         {/* Layout */}
         <div className="col-span-2 text-[10px] font-semibold text-gray-600 uppercase tracking-wider mt-1 mb-1">Estructura</div>
